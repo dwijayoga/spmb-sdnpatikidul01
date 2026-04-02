@@ -114,7 +114,7 @@ kolom_publik = ['No', 'Nama:', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
 
 # Render tabel (hide_index=True agar nomor bawaan Streamlit yang tanpa judul dihilangkan)
 st.dataframe(tabel_pendaftar[kolom_publik],
-             hide_index=True, use_container_width=True
+             hide_index=True, use_container_width=True,
              width='stretch'
 )
 

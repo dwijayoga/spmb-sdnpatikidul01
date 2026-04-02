@@ -11,22 +11,22 @@ st.title("Hasil SPMB SDN Pati Kidul 01")
 st.subheader("Tahun Ajaran 2026/2027")
 st.markdown("---")
 
-# --- TAMBAHAN: SEMBUNYIKAN TOMBOL DOWNLOAD ---
+# --- TAMBAHAN: SEMBUNYIKAN TOMBOL DOWNLOAD & LOCK TABEL ---
 st.markdown(
     """
     <style>
-    /* Menyembunyikan tombol download (ikon unduh) pada tabel */
+    /* Menyembunyikan toolbar (tombol download & search) pada tabel */
     [data-testid="stElementToolbar"] {
         display: none;
     }
     
-    /* Opsional: Menghilangkan menu klik kanan pada tabel */
+    /* Membuat tabel hanya bisa dilihat (tidak bisa diklik/copy) */
     .stDataFrame {
         pointer-events: none;
     }
     </style>
     """,
-    unsafe_allow_index=True
+    unsafe_allow_html=True
 )
 
 # ==========================================
@@ -35,8 +35,6 @@ st.markdown(
 link_rahasia = "https://docs.google.com/spreadsheets/d/1YDv4eLjesrqbbOJhEy0HfHQJm6Hii638UOu9ovJDrjk/export?format=csv"
 koordinat_sekolah = (-6.7516, 111.0321)
 kuota_sekolah = 3  # <--- Ubah angka ini sesuai daya tampung riil sekolah Anda
-
-# Fitur penyedot data dengan jeda waktu 60 detik agar tidak membebani server
 
 
 @st.cache_data(ttl=60)
@@ -72,22 +70,21 @@ tabel_pendaftar['Usia (Tahun)'] = (
 tabel_pendaftar['Usia (Tahun)'] = tabel_pendaftar['Usia (Tahun)'].round(1)
 
 # C. Hitung Rasio & Skor Penentu Peringkat
-# Rumus Dasar: Usia / (Jarak + 1)
 tabel_pendaftar['Rasio'] = (
     tabel_pendaftar['Usia (Tahun)'] / (tabel_pendaftar['Jarak (km)'] + 1))
 
-# Aturan Mutlak: Jika usia < 6 tahun, skor dihancurkan menjadi -1.0 agar selalu di peringkat bawah
+# Aturan Mutlak: Jika usia < 6 tahun, skor pinalti agar selalu di peringkat bawah
 tabel_pendaftar['Skor Seleksi'] = tabel_pendaftar.apply(
     lambda x: x['Rasio'] if x['Usia (Tahun)'] >= 6.0 else -1.0, axis=1
 )
 
-# D. Urutkan berdasarkan Skor Seleksi Tertinggi
+# D. Urutkan berdasarkan Skor Seleksi Tertinggi (Descending)
 tabel_pendaftar = tabel_pendaftar.sort_values(
     by='Skor Seleksi', ascending=False)
 
-# E. Buat Kolom Nomor Urut (No)
+# E. Buat Kolom Nomor Urut (No) yang Rapi
 tabel_pendaftar = tabel_pendaftar.reset_index(drop=True)
-tabel_pendaftar.index += 1  # Mulai angka dari 1
+tabel_pendaftar.index += 1  # Mulai nomor urut dari 1
 tabel_pendaftar = tabel_pendaftar.reset_index()
 tabel_pendaftar = tabel_pendaftar.rename(columns={'index': 'No'})
 
@@ -108,14 +105,12 @@ tabel_pendaftar['Keterangan'] = tabel_pendaftar.apply(tentukan_status, axis=1)
 # ==========================================
 # 4. TAMPILKAN TABEL KE LAYAR PUBLIK
 # ==========================================
-# Pilih kolom yang aman untuk ditampilkan ke orang tua
-# (Ganti 'Nama:' dengan nama kolom asli di Google Form Anda jika namanya berbeda)
-kolom_publik = ['No', 'Nama:', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
+# Pastikan nama kolom 'Nama' sesuai dengan yang ada di Google Sheets Anda
+kolom_publik = ['No', 'Nama', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
 
-# Render tabel (hide_index=True agar nomor bawaan Streamlit yang tanpa judul dihilangkan)
 st.dataframe(
     tabel_pendaftar[kolom_publik],
-    hide_index=True, 
+    hide_index=True,
     width='stretch'
 )
 

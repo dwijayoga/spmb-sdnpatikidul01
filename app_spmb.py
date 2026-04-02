@@ -1,0 +1,103 @@
+import streamlit as st
+import pandas as pd
+from geopy.distance import geodesic
+
+# ==========================================
+# 1. PENGATURAN TAMPILAN HALAMAN (FRONT-END)
+# ==========================================
+st.set_page_config(page_title="SPMB SDN Pati Kidul 1", layout="centered")
+
+st.title("Hasil SPMB SDN Pati Kidul 01")
+st.subheader("Tahun Ajaran 2026/2027")
+st.markdown("---")
+
+# ==========================================
+# 2. KONFIGURASI SISTEM (PENGATURAN UTAMA)
+# ==========================================
+link_rahasia = "https://docs.google.com/spreadsheets/d/1YDv4eLjesrqbbOJhEy0HfHQJm6Hii638UOu9ovJDrjk/export?format=csv"
+koordinat_sekolah = (-6.7516, 111.0321)
+kuota_sekolah = 3  # <--- Ubah angka ini sesuai daya tampung riil sekolah Anda
+
+# Fitur penyedot data dengan jeda waktu 60 detik agar tidak membebani server
+
+
+@st.cache_data(ttl=60)
+def muat_data():
+    return pd.read_csv(link_rahasia)
+
+
+tabel_pendaftar = muat_data()
+
+# ==========================================
+# 3. OTAK ZONASI & LOGIKA SELEKSI (BACK-END)
+# ==========================================
+
+
+def hitung_jarak(koordinat_siswa):
+    try:
+        titik_siswa = tuple(map(float, str(koordinat_siswa).split(',')))
+        return round(geodesic(koordinat_sekolah, titik_siswa).kilometers, 2)
+    except:
+        return 999.0
+
+
+# A. Hitung Jarak
+tabel_pendaftar['Jarak (km)'] = tabel_pendaftar['Koordinat Rumah'].apply(
+    hitung_jarak)
+
+# B. Hitung Usia (Berdasarkan waktu hari ini)
+tabel_pendaftar['Tanggal Lahir'] = pd.to_datetime(
+    tabel_pendaftar['Tanggal Lahir'], errors='coerce')
+sekarang = pd.to_datetime('today')
+tabel_pendaftar['Usia (Tahun)'] = (
+    sekarang - tabel_pendaftar['Tanggal Lahir']).dt.days / 365.25
+tabel_pendaftar['Usia (Tahun)'] = tabel_pendaftar['Usia (Tahun)'].round(1)
+
+# C. Hitung Rasio & Skor Penentu Peringkat
+# Rumus Dasar: Usia / (Jarak + 1)
+tabel_pendaftar['Rasio'] = (
+    tabel_pendaftar['Usia (Tahun)'] / (tabel_pendaftar['Jarak (km)'] + 1))
+
+# Aturan Mutlak: Jika usia < 6 tahun, skor dihancurkan menjadi -1.0 agar selalu di peringkat bawah
+tabel_pendaftar['Skor Seleksi'] = tabel_pendaftar.apply(
+    lambda x: x['Rasio'] if x['Usia (Tahun)'] >= 6.0 else -1.0, axis=1
+)
+
+# D. Urutkan berdasarkan Skor Seleksi Tertinggi
+tabel_pendaftar = tabel_pendaftar.sort_values(
+    by='Skor Seleksi', ascending=False)
+
+# E. Buat Kolom Nomor Urut (No)
+tabel_pendaftar = tabel_pendaftar.reset_index(drop=True)
+tabel_pendaftar.index += 1  # Mulai angka dari 1
+tabel_pendaftar = tabel_pendaftar.reset_index()
+tabel_pendaftar = tabel_pendaftar.rename(columns={'index': 'No'})
+
+# F. Tentukan Status Berdasarkan Peringkat & Aturan Umur
+
+
+def tentukan_status(row):
+    if row['Usia (Tahun)'] < 6.0:
+        return "❌ Tidak Diterima (Usia < 6 th)"
+    elif row['No'] <= kuota_sekolah:
+        return "✅ Diterima"
+    else:
+        return "⏳ Cadangan"
+
+
+tabel_pendaftar['Keterangan'] = tabel_pendaftar.apply(tentukan_status, axis=1)
+
+# ==========================================
+# 4. TAMPILKAN TABEL KE LAYAR PUBLIK
+# ==========================================
+# Pilih kolom yang aman untuk ditampilkan ke orang tua
+# (Ganti 'Nama:' dengan nama kolom asli di Google Form Anda jika namanya berbeda)
+kolom_publik = ['No', 'Nama:', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
+
+# Render tabel (hide_index=True agar nomor bawaan Streamlit yang tanpa judul dihilangkan)
+st.dataframe(tabel_pendaftar[kolom_publik],
+             hide_index=True, use_container_width=True)
+
+# Berikan catatan info di bawah tabel
+st.info(f"Kapasitas daya tampung saat ini: **{kuota_sekolah} siswa**.")
+st.caption("Catatan: Peringkat disusun otomatis oleh sistem. Prioritas diberikan kepada pendaftar dengan kombinasi jarak terdekat dan usia lebih tua. Batas usia minimal penerimaan adalah 6 tahun.")

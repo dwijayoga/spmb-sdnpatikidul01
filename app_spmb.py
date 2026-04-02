@@ -11,6 +11,24 @@ st.title("Hasil SPMB SDN Pati Kidul 01")
 st.subheader("Tahun Ajaran 2026/2027")
 st.markdown("---")
 
+# --- TAMBAHAN: SEMBUNYIKAN TOMBOL DOWNLOAD ---
+st.markdown(
+    """
+    <style>
+    /* Menyembunyikan tombol download (ikon unduh) pada tabel */
+    [data-testid="stElementToolbar"] {
+        display: none;
+    }
+    
+    /* Opsional: Menghilangkan menu klik kanan pada tabel */
+    .stDataFrame {
+        pointer-events: none;
+    }
+    </style>
+    """,
+    unsafe_allow_index=True
+)
+
 # ==========================================
 # 2. KONFIGURASI SISTEM (PENGATURAN UTAMA)
 # ==========================================
@@ -96,7 +114,9 @@ kolom_publik = ['No', 'Nama:', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
 
 # Render tabel (hide_index=True agar nomor bawaan Streamlit yang tanpa judul dihilangkan)
 st.dataframe(tabel_pendaftar[kolom_publik],
-             hide_index=True, use_container_width=True)
+             hide_index=True, use_container_width=True
+             width='stretch'
+)
 
 # Berikan catatan info di bawah tabel
 st.info(f"Kapasitas daya tampung saat ini: **{kuota_sekolah} siswa**.")

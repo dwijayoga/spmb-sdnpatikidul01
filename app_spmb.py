@@ -109,8 +109,8 @@ tabel_pendaftar['Keterangan'] = tabel_pendaftar.apply(tentukan_status, axis=1)
 # ==========================================
 # 4. TAMPILKAN
 # ==========================================
-# Pastikan nama kolom 'Nama:' sesuai dengan di Google Sheets
-kolom_publik = ['No', 'Nama:', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
+# Pastikan nama kolom 'Nama' sesuai dengan di Google Sheets
+kolom_publik = ['No', 'Nama', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
 st.dataframe(tabel_pendaftar[kolom_publik], hide_index=True, width='stretch')
 
 st.info(f"Kapasitas daya tampung: **{kuota_sekolah} siswa**.")

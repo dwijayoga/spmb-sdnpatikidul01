@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from geopy.distance import geodesic
+import requests  # Untuk melacak link Maps
 
 # ==========================================
 # 1. PENGATURAN TAMPILAN HALAMAN (FRONT-END)
@@ -11,30 +12,23 @@ st.title("Hasil SPMB SDN Pati Kidul 01")
 st.subheader("Tahun Ajaran 2026/2027")
 st.markdown("---")
 
-# --- TAMBAHAN: SEMBUNYIKAN TOMBOL DOWNLOAD & LOCK TABEL ---
+# CSS untuk sembunyikan toolbar & kunci tabel
 st.markdown(
     """
     <style>
-    /* Menyembunyikan toolbar (tombol download & search) pada tabel */
-    [data-testid="stElementToolbar"] {
-        display: none;
-    }
-    
-    /* Membuat tabel hanya bisa dilihat (tidak bisa diklik/copy) */
-    .stDataFrame {
-        pointer-events: none;
-    }
+    [data-testid="stElementToolbar"] { display: none; }
+    .stDataFrame { pointer-events: none; }
     </style>
     """,
     unsafe_allow_html=True
 )
 
 # ==========================================
-# 2. KONFIGURASI SISTEM (PENGATURAN UTAMA)
+# 2. KONFIGURASI SISTEM
 # ==========================================
 link_rahasia = "https://docs.google.com/spreadsheets/d/1YDv4eLjesrqbbOJhEy0HfHQJm6Hii638UOu9ovJDrjk/export?format=csv"
 koordinat_sekolah = (-6.7516, 111.0321)
-kuota_sekolah = 3  # <--- Ubah angka ini sesuai daya tampung riil sekolah Anda
+kuota_sekolah = 5
 
 
 @st.cache_data(ttl=60)
@@ -45,75 +39,78 @@ def muat_data():
 tabel_pendaftar = muat_data()
 
 # ==========================================
-# 3. OTAK ZONASI & LOGIKA SELEKSI (BACK-END)
+# 3. MESIN PENERJEMAH LINK MAPS -> KOORDINAT
 # ==========================================
 
 
-def hitung_jarak(koordinat_siswa):
+def ekstrak_koordinat(link_maps):
     try:
-        titik_siswa = tuple(map(float, str(koordinat_siswa).split(',')))
-        return round(geodesic(koordinat_sekolah, titik_siswa).kilometers, 2)
+        # Jika input sudah berupa koordinat (angka, angka)
+        if "," in str(link_maps) and "http" not in str(link_maps):
+            return tuple(map(float, str(link_maps).split(',')))
+
+        # Jika input berupa Link Google Maps
+        response = requests.get(link_maps, allow_redirects=True, timeout=5)
+        final_url = response.url  # Mengambil URL asli setelah redirect
+
+        # Mencari angka koordinat di dalam URL asli
+        # Format biasanya: ...@(-6.123,111.123)...
+        if "@" in final_url:
+            coords_part = final_url.split("@")[1].split(",")[0:2]
+            return (float(coords_part[0]), float(coords_part[1]))
+        return None
     except:
-        return 999.0
+        return None
 
 
-# A. Hitung Jarak
-tabel_pendaftar['Jarak (km)'] = tabel_pendaftar['Koordinat Rumah'].apply(
+def hitung_jarak(link_maps):
+    titik_siswa = ekstrak_koordinat(link_maps)
+    if titik_siswa:
+        return round(geodesic(koordinat_sekolah, titik_siswa).kilometers, 2)
+    return 999.0  # Jika link rusak/tidak terbaca
+
+
+# --- EKSEKUSI DATA ---
+# Ganti 'Lokasi Rumah' dengan nama kolom di Google Sheets Anda yang berisi Link Maps
+tabel_pendaftar['Jarak (km)'] = tabel_pendaftar['Lokasi Rumah'].apply(
     hitung_jarak)
 
-# B. Hitung Usia (Berdasarkan waktu hari ini)
+# Hitung Usia
 tabel_pendaftar['Tanggal Lahir'] = pd.to_datetime(
     tabel_pendaftar['Tanggal Lahir'], errors='coerce')
 sekarang = pd.to_datetime('today')
 tabel_pendaftar['Usia (Tahun)'] = (
-    sekarang - tabel_pendaftar['Tanggal Lahir']).dt.days / 365.25
-tabel_pendaftar['Usia (Tahun)'] = tabel_pendaftar['Usia (Tahun)'].round(1)
+    (sekarang - tabel_pendaftar['Tanggal Lahir']).dt.days / 365.25).round(1)
 
-# C. Hitung Rasio & Skor Penentu Peringkat
+# Hitung Rasio & Skor Seleksi
 tabel_pendaftar['Rasio'] = (
     tabel_pendaftar['Usia (Tahun)'] / (tabel_pendaftar['Jarak (km)'] + 1))
-
-# Aturan Mutlak: Jika usia < 6 tahun, skor pinalti agar selalu di peringkat bawah
 tabel_pendaftar['Skor Seleksi'] = tabel_pendaftar.apply(
     lambda x: x['Rasio'] if x['Usia (Tahun)'] >= 6.0 else -1.0, axis=1
 )
 
-# D. Urutkan berdasarkan Skor Seleksi Tertinggi (Descending)
+# Urutkan & Buat No Urut
 tabel_pendaftar = tabel_pendaftar.sort_values(
-    by='Skor Seleksi', ascending=False)
+    by='Skor Seleksi', ascending=False).reset_index(drop=True)
+tabel_pendaftar.index += 1
+tabel_pendaftar = tabel_pendaftar.reset_index().rename(columns={'index': 'No'})
 
-# E. Buat Kolom Nomor Urut (No) yang Rapi
-tabel_pendaftar = tabel_pendaftar.reset_index(drop=True)
-tabel_pendaftar.index += 1  # Mulai nomor urut dari 1
-tabel_pendaftar = tabel_pendaftar.reset_index()
-tabel_pendaftar = tabel_pendaftar.rename(columns={'index': 'No'})
-
-# F. Tentukan Status Berdasarkan Peringkat & Aturan Umur
+# Status
 
 
 def tentukan_status(row):
     if row['Usia (Tahun)'] < 6.0:
         return "❌ Tidak Diterima (Usia < 6 th)"
-    elif row['No'] <= kuota_sekolah:
-        return "✅ Diterima"
-    else:
-        return "⏳ Cadangan"
+    return "✅ Diterima" if row['No'] <= kuota_sekolah else "⏳ Cadangan"
 
 
 tabel_pendaftar['Keterangan'] = tabel_pendaftar.apply(tentukan_status, axis=1)
 
 # ==========================================
-# 4. TAMPILKAN TABEL KE LAYAR PUBLIK
+# 4. TAMPILKAN
 # ==========================================
-# Pastikan nama kolom 'Nama' sesuai dengan yang ada di Google Sheets Anda
-kolom_publik = ['No', 'Nama', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
+# Pastikan nama kolom 'Nama:' sesuai dengan di Google Sheets
+kolom_publik = ['No', 'Nama:', 'Jarak (km)', 'Usia (Tahun)', 'Keterangan']
+st.dataframe(tabel_pendaftar[kolom_publik], hide_index=True, width='stretch')
 
-st.dataframe(
-    tabel_pendaftar[kolom_publik],
-    hide_index=True,
-    width='stretch'
-)
-
-# Berikan catatan info di bawah tabel
-st.info(f"Kapasitas daya tampung saat ini: **{kuota_sekolah} siswa**.")
-st.caption("Catatan: Peringkat disusun otomatis oleh sistem. Prioritas diberikan kepada pendaftar dengan kombinasi jarak terdekat dan usia lebih tua. Batas usia minimal penerimaan adalah 6 tahun.")
+st.info(f"Kapasitas daya tampung: **{kuota_sekolah} siswa**.")

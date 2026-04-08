@@ -4,6 +4,7 @@ geopy
 requests
 folium
 streamlit-folium
-gspread
+st-supabase-connection
+supabase
 google-auth
 fpdf

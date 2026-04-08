@@ -465,7 +465,9 @@ elif menu == "Admin SPMB":
                     st.warning("Data dihapus.")
                     st.rerun()
     elif adm_pass:
-        st.error("Akses Ditolak")def hitung_jarak(koor_siswa):
+        st.error("Akses Ditolak")
+    
+    def hitung_jarak(koor_siswa):
     lat_sek, lon_sek = -6.7516, 111.0321
     try:
         lat_sis, lon_sis = map(float, str(koor_siswa).split(","))

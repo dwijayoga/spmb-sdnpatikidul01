@@ -2,3 +2,8 @@ streamlit
 pandas
 geopy
 requests
+folium
+streamlit-folium
+gspread
+google-auth
+fpdf

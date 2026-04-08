@@ -43,24 +43,44 @@ KOORDINAT_KECAMATAN = {
 # Inisialisasi koneksi menggunakan st.secrets["supabase"]
 conn = st.connection("supabase", type=SupabaseConnection)
 
+
 @st.cache_data(ttl=300)
 def ambil_data_pendaftaran():
     # Mengambil semua data dari tabel 'pendaftaran'
     res = conn.table("pendaftaran").select("*").execute()
     return pd.DataFrame(res.data)
 
+
+@st.cache_data(ttl=300)
+def cek_status_pengumuman():
+    # Mengambil status pengumuman dari tabel 'pengaturan'
+    try:
+        res = conn.table("pengaturan").select("nilai").eq(
+            "kunci", "status_pengumuman").execute()
+        if res.data:
+            return res.data[0]['nilai']
+        return "TUTUP"
+    except:
+        return "TUTUP"
+
 # ==========================================
 # 3. FUNGSI LOGIKA (JARAK & USIA)
 # ==========================================
+
+
 def hitung_jarak(koor_siswa):
     lat_sek, lon_sek = -6.7516, 111.0321
     try:
         lat_sis, lon_sis = map(float, str(koor_siswa).split(","))
         R = 6371
-        dlat, dlon = math.radians(lat_sis - lat_sek), math.radians(lon_sis - lon_sek)
-        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat_sek)) * math.cos(math.radians(lat_sis)) * math.sin(dlon/2)**2
+        dlat, dlon = math.radians(
+            lat_sis - lat_sek), math.radians(lon_sis - lon_sek)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat_sek)) * \
+            math.cos(math.radians(lat_sis)) * math.sin(dlon/2)**2
         return round(R * (2 * math.atan2(math.sqrt(a), math.sqrt(1-a))), 2)
-    except: return 0
+    except:
+        return 0
+
 
 def hitung_usia_detail(tgl_lahir_str):
     try:
@@ -68,32 +88,40 @@ def hitung_usia_detail(tgl_lahir_str):
         tgl = datetime.datetime.strptime(str(tgl_lahir_str), "%Y-%m-%d").date()
         thn = target.year - tgl.year
         bln = target.month - tgl.month
-        if target.day < tgl.day: bln -= 1
-        if bln < 0: thn -= 1; bln += 12
+        if target.day < tgl.day:
+            bln -= 1
+        if bln < 0:
+            thn -= 1
+            bln += 12
         return f"{thn} Thn, {bln} Bln"
-    except: return "-"
+    except:
+        return "-"
+
 
 # ==========================================
 # 4. MENU NAVIGASI
 # ==========================================
-menu = st.sidebar.selectbox("Menu Utama", ["Pendaftaran Baru", "Login Siswa", "Hasil Seleksi", "Admin SPMB"])
+menu = st.sidebar.selectbox(
+    "Menu Utama", ["Pendaftaran Baru", "Login Siswa", "Hasil Seleksi", "Admin SPMB"])
 
 if menu == "Pendaftaran Baru":
     st.title("📝 Pendaftaran Siswa Baru")
-    
+
     with st.container(border=True):
         nama = st.text_input("Nama Lengkap")
         nik = st.text_input("NIK (16 Digit)", max_chars=16)
         pw = st.text_input("Password Akun", type="password")
-        tgl_lahir = st.date_input("Tanggal Lahir", min_value=datetime.date(2015,1,1))
+        tgl_lahir = st.date_input(
+            "Tanggal Lahir", min_value=datetime.date(2015, 1, 1))
         asal = st.text_input("Asal TK")
-        
+
         st.markdown("---")
         jns = st.selectbox("Jenis Alamat", ["Rumah", "Domisili", "Kantor"])
-        
+
         c1, c2 = st.columns(2)
         with c1:
-            kec = st.selectbox("Kecamatan", options=list(KOORDINAT_KECAMATAN.keys()))
+            kec = st.selectbox("Kecamatan", options=list(
+                KOORDINAT_KECAMATAN.keys()))
             desa = st.text_input("Desa")
         with c2:
             rt = st.text_input("RT", max_chars=3)
@@ -101,7 +129,8 @@ if menu == "Pendaftaran Baru":
 
     st.write("📍 **Klik Lokasi Rumah pada Peta**")
     m = folium.Map(location=KOORDINAT_KECAMATAN[kec], zoom_start=15)
-    folium.TileLayer(tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satellite').add_to(m)
+    folium.TileLayer(
+        tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satellite').add_to(m)
     m.add_child(folium.LatLngPopup())
     map_res = st_folium(m, height=350, width="stretch")
 
@@ -121,10 +150,11 @@ if menu == "Pendaftaran Baru":
             try:
                 # Perintah INSERT profesional ke Supabase
                 conn.table("pendaftaran").insert(data_baru).execute()
-                st.cache_data.clear() # Reset cache agar data langsung muncul di tabel Admin
+                st.cache_data.clear()  # Reset cache agar data langsung muncul di tabel Admin
                 st.success("Pendaftaran Berhasil!")
             except Exception as e:
-                st.error(f"Gagal Daftar. NIK mungkin sudah ada atau koneksi bermasalah: {e}")
+                st.error(
+                    f"Gagal Daftar. NIK mungkin sudah ada atau koneksi bermasalah: {e}")
 
 elif menu == "Login Siswa":
     st.title("🔑 Dashboard Siswa")
@@ -144,51 +174,40 @@ elif menu == "Login Siswa":
 elif menu == "Admin SPMB":
     st.title("👨‍💼 Panel Verifikasi Admin")
     admin_pw_input = st.text_input("Password Admin", type="password")
-    
+
     if admin_pw_input == st.secrets["admins"]["admin_pw"]:
         df_admin = ambil_data_pendaftaran()
         st.write(f"Total Pendaftar: {len(df_admin)}")
-        
+
         # Filter pendaftar yang belum diverifikasi
-        pendaftar_list = df_admin[df_admin['Status'] == "Belum Verifikasi"]['Nama'].tolist()
-        
+        pendaftar_list = df_admin[df_admin['Status']
+                                  == "Belum Verifikasi"]['Nama'].tolist()
+
         if pendaftar_list:
-            nama_pilih = st.selectbox("Pilih Siswa untuk Verifikasi:", pendaftar_list)
+            nama_pilih = st.selectbox(
+                "Pilih Siswa untuk Verifikasi:", pendaftar_list)
             if st.button("Verifikasi Siswa Ini"):
                 # Perintah UPDATE ke Supabase
-                conn.table("pendaftaran").update({"Status": "Terverifikasi"}).eq("Nama", nama_pilih).execute()
+                conn.table("pendaftaran").update(
+                    {"Status": "Terverifikasi"}).eq("Nama", nama_pilih).execute()
                 st.cache_data.clear()
                 st.success(f"{nama_pilih} berhasil diverifikasi!")
                 st.rerun()
-        else:
-            st.write("Semua pendaftar sudah diverifikasi.")    lat_sek, lon_sek = -6.7516, 111.0321
-    try:
-        lat_sis, lon_sis = map(float, str(koor_siswa).split(","))
-        R = 6371
-        dlat, dlon = math.radians(lat_sis - lat_sek), math.radians(lon_sis - lon_sek)
-        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat_sek)) * math.cos(math.radians(lat_sis)) * math.sin(dlon/2)**2
-        return round(R * (2 * math.atan2(math.sqrt(a), math.sqrt(1-a))), 2)
-    except: return 0
+else:
+    st.write("Semua pendaftar sudah diverifikasi.")
 
-def hitung_usia_detail(tgl_lahir_str):
-    try:
-        target = datetime.date(2026, 7, 1)
-        tgl = datetime.datetime.strptime(str(tgl_lahir_str), "%Y-%m-%d").date()
-        thn = target.year - tgl.year
-        bln = target.month - tgl.month
-        if target.day < tgl.day: bln -= 1
-        if bln < 0: thn -= 1; bln += 12
-        return f"{thn} Thn, {bln} Bln"
-    except: return "-"
 
 def hitung_skor_indeks(tgl_lahir_str, koordinat):
     try:
         target = datetime.date(2026, 7, 1)
-        tgl_lahir = datetime.datetime.strptime(str(tgl_lahir_str), "%Y-%m-%d").date()
+        tgl_lahir = datetime.datetime.strptime(
+            str(tgl_lahir_str), "%Y-%m-%d").date()
         total_hari = (target - tgl_lahir).days
         jarak = hitung_jarak(koordinat)
         return round(total_hari + (1 / (jarak + 0.01)), 4)
-    except: return 0
+    except:
+        return 0
+
 
 def buat_pdf_bukti(row):
     pdf = FPDF()
@@ -198,9 +217,11 @@ def buat_pdf_bukti(row):
     pdf.ln(10)
     pdf.set_font("Arial", '', 12)
     data = [
-        ("Nama Lengkap", row['Nama']), ("NIK", row['NIK']), 
-        ("Tanggal Lahir", row['Tanggal Lahir']), ("Usia (per Juli)", row['Usia']),
-        ("Asal Sekolah", row['Asal Sekolah']), ("Jarak ke Sekolah", f"{row['Jarak']} KM"),
+        ("Nama Lengkap", row['Nama']), ("NIK", row['NIK']),
+        ("Tanggal Lahir", row['Tanggal Lahir']
+         ), ("Usia (per Juli)", row['Usia']),
+        ("Asal Sekolah", row['Asal Sekolah']
+         ), ("Jarak ke Sekolah", f"{row['Jarak']} KM"),
         ("Alamat Lengkap", row['Alamat Lengkap']), ("Status", row['Status'])
     ]
     for label, val in data:
@@ -208,32 +229,38 @@ def buat_pdf_bukti(row):
         pdf.cell(0, 10, str(val), 0, 1)
     pdf.ln(10)
     pdf.set_font("Arial", 'I', 10)
-    pdf.cell(0, 10, f"Dicetak pada: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}", align='R')
+    pdf.cell(
+        0, 10, f"Dicetak pada: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}", align='R')
     return pdf.output(dest='S').encode('latin-1')
+
 
 # ==========================================
 # 4. NAVIGASI SIDEBAR
 # ==========================================
-menu = st.sidebar.selectbox("Menu Utama", ["Pendaftaran Baru", "Login Siswa", "Hasil Seleksi", "Admin SPMB"])
+menu = st.sidebar.selectbox(
+    "Menu Utama", ["Pendaftaran Baru", "Login Siswa", "Hasil Seleksi", "Admin SPMB"])
 
 # --- MENU: PENDAFTARAN BARU ---
 if menu == "Pendaftaran Baru":
     st.title("📝 Pendaftaran Siswa Baru")
-    
+
     with st.container(border=True):
         nama = st.text_input("Nama Lengkap")
         nik = st.text_input("NIK (16 Digit)", max_chars=16)
         pw = st.text_input("Password Akun", type="password")
-        tgl_lahir = st.date_input("Tanggal Lahir", min_value=datetime.date(2015,1,1))
+        tgl_lahir = st.date_input(
+            "Tanggal Lahir", min_value=datetime.date(2015, 1, 1))
         asal = st.text_input("Asal TK")
-        
+
         st.markdown("---")
         jns = st.selectbox("Jenis Alamat", ["Rumah", "Domisili", "Kantor"])
-        if jns != "Rumah": st.info("ℹ️ Sertakan surat keterangan domisili/kerja saat verifikasi.")
-        
+        if jns != "Rumah":
+            st.info("ℹ️ Sertakan surat keterangan domisili/kerja saat verifikasi.")
+
         c1, c2 = st.columns(2)
         with c1:
-            kec = st.selectbox("Kecamatan", options=list(KOORDINAT_KECAMATAN.keys()))
+            kec = st.selectbox("Kecamatan", options=list(
+                KOORDINAT_KECAMATAN.keys()))
             desa = st.text_input("Desa")
         with c2:
             rt = st.text_input("RT", max_chars=3)
@@ -241,7 +268,8 @@ if menu == "Pendaftaran Baru":
 
     st.write("📍 **Klik Lokasi Rumah pada Peta**")
     m = folium.Map(location=KOORDINAT_KECAMATAN[kec], zoom_start=15)
-    folium.TileLayer(tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satellite').add_to(m)
+    folium.TileLayer(
+        tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satellite').add_to(m)
     m.add_child(folium.LatLngPopup())
     map_res = st_folium(m, height=350, width="stretch")
 
@@ -280,7 +308,8 @@ elif menu == "Login Siswa":
             c2.metric("Jarak", f"{u['Jarak']} KM")
             c3.metric("Usia", u['Usia'])
             st.write(f"**Alamat:** {u['Alamat Lengkap']}")
-            st.download_button("🖨️ Cetak Bukti Pendaftaran", buat_pdf_bukti(u), f"Bukti_{u['Nama']}.pdf")
+            st.download_button("🖨️ Cetak Bukti Pendaftaran",
+                               buat_pdf_bukti(u), f"Bukti_{u['Nama']}.pdf")
         else:
             st.error("NIK atau Password salah.")
 
@@ -293,10 +322,12 @@ elif menu == "Hasil Seleksi":
         df = ambil_data_pendaftaran()
         df_v = df[df['Status'] == "Terverifikasi"].copy()
         if not df_v.empty:
-            df_v['Skor'] = df_v.apply(lambda x: hitung_skor_indeks(x['Tanggal Lahir'], x['Koordinat']), axis=1)
+            df_v['Skor'] = df_v.apply(lambda x: hitung_skor_indeks(
+                x['Tanggal Lahir'], x['Koordinat']), axis=1)
             df_sorted = df_v.sort_values(by="Skor", ascending=False)
             df_sorted.insert(0, 'Peringkat', range(1, len(df_sorted) + 1))
-            st.dataframe(df_sorted[['Peringkat', 'Nama', 'Usia', 'Jarak']], hide_index=True, use_container_width=True)
+            st.dataframe(df_sorted[['Peringkat', 'Nama', 'Usia', 'Jarak']],
+                         hide_index=True, use_container_width=True)
         else:
             st.info("Belum ada data terverifikasi.")
 
@@ -305,7 +336,7 @@ elif menu == "Admin SPMB":
     st.title("👨‍💼 Panel Admin & Verifikasi")
     adm_user = st.text_input("User Admin")
     adm_pass = st.text_input("Password", type="password")
-    
+
     admins = {
         "Admin": st.secrets["admins"]["admin_pw"],
         "Kepsek": st.secrets["admins"]["kepsek_pw"]
@@ -313,36 +344,40 @@ elif menu == "Admin SPMB":
 
     if adm_user in admins and adm_pass == admins[adm_user]:
         st.success(f"Login Berhasil sebagai {adm_user}")
-        
+
         # Fitur Kepsek: Kontrol Pengumuman
         if adm_user == "Kepsek":
             st.markdown("### 📢 Kontrol Pengumuman")
             stat_skrg = cek_status_pengumuman()
             if st.button(f"{'🔒 TUTUP' if stat_skrg == 'BUKA' else '🔓 BUKA'} PENGUMUMAN"):
                 n_stat = "TUTUP" if stat_skrg == "BUKA" else "BUKA"
-                conn.table("pengaturan").update({"nilai": n_stat}).eq("kunci", "status_pengumuman").execute()
+                conn.table("pengaturan").update({"nilai": n_stat}).eq(
+                    "kunci", "status_pengumuman").execute()
                 st.cache_data.clear()
                 st.rerun()
 
         # Fitur Verifikasi
         st.markdown("---")
         df_adm = ambil_data_pendaftaran()
-        pilihan = st.selectbox("Pilih Siswa untuk Verifikasi:", ["-- Pilih --"] + df_adm['Nama'].tolist())
-        
+        pilihan = st.selectbox("Pilih Siswa untuk Verifikasi:", [
+                               "-- Pilih --"] + df_adm['Nama'].tolist())
+
         if pilihan != "-- Pilih --":
             det = df_adm[df_adm['Nama'] == pilihan].iloc[0]
             with st.expander("Detail & Verifikasi", expanded=True):
                 st.write(f"**Nama:** {det['Nama']} | **NIK:** {det['NIK']}")
                 st.write(f"**Alamat:** {det['Alamat Lengkap']}")
-                
+
                 c1, c2 = st.columns(2)
                 if c1.button("✅ VERIFIKASI", use_container_width=True):
-                    conn.table("pendaftaran").update({"Status": "Terverifikasi", "Verifikator": adm_user}).eq("NIK", det['NIK']).execute()
+                    conn.table("pendaftaran").update(
+                        {"Status": "Terverifikasi", "Verifikator": adm_user}).eq("NIK", det['NIK']).execute()
                     st.cache_data.clear()
                     st.success("Berhasil diverifikasi!")
                     st.rerun()
                 if c2.button("🗑️ HAPUS DATA", type="secondary", use_container_width=True):
-                    conn.table("pendaftaran").delete().eq("NIK", det['NIK']).execute()
+                    conn.table("pendaftaran").delete().eq(
+                        "NIK", det['NIK']).execute()
                     st.cache_data.clear()
                     st.warning("Data dihapus.")
                     st.rerun()
